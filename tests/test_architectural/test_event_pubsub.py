@@ -1,70 +1,91 @@
-"""Tests for Event-Driven Pub-Sub pattern implementation."""
+"""Tests for Event-Driven Pub/Sub pattern implementation."""
+
+import time
 
 from design_patterns.architectural.event_pubsub import (
-    DomainEvent,
+    EmailNotificationListener,
+    Event,
     EventBus,
-    PaymentCompletedEvent,
-    UserRegisteredEvent,
+    InventoryReservationListener,
+    OrderPlacedEvent,
+    PaymentReceivedEvent,
+    ShipmentDispatchedEvent,
 )
 
 
-class TestEventBus:
-    def test_publish_to_single_subscriber(self) -> None:
+class TestEventBusPubSub:
+    def test_single_event_multiple_subscribers(self) -> None:
         bus = EventBus()
-        received = []
+        email_listener = EmailNotificationListener()
+        inventory_listener = InventoryReservationListener()
 
-        def on_user_registered(event: UserRegisteredEvent) -> None:
-            received.append(event.email)
+        bus.register_handler(OrderPlacedEvent, email_listener.on_order_placed)
+        bus.register_handler(OrderPlacedEvent, inventory_listener.on_order_placed)
 
-        bus.subscribe(UserRegisteredEvent, on_user_registered)
-        bus.publish(UserRegisteredEvent(user_id="U1", email="test@test.com"))
+        evt = OrderPlacedEvent(order_id="101", customer_email="user@test.com", total_amount=150.0)
+        invoked = bus.publish(evt)
 
-        assert received == ["test@test.com"]
+        assert invoked == 2
+        assert len(email_listener.sent_emails) == 1
+        assert email_listener.sent_emails[0][0] == "user@test.com"
+        assert inventory_listener.reservations == ["101"]
 
-    def test_polymorphic_hierarchy_dispatch(self) -> None:
+    def test_decorator_subscription(self) -> None:
         bus = EventBus()
-        all_events = []
+        captured: list[PaymentReceivedEvent] = []
 
-        # Subscribing to base DomainEvent captures all events
-        bus.subscribe(DomainEvent, lambda e: all_events.append(e.event_id))
+        @bus.subscribe(PaymentReceivedEvent)
+        def handle_payment(e: PaymentReceivedEvent) -> None:
+            captured.append(e)
 
-        bus.publish(UserRegisteredEvent(user_id="U1", email="a@b.com"))
-        bus.publish(PaymentCompletedEvent(transaction_id="TX1", amount=99.0))
+        evt = PaymentReceivedEvent(order_id="101", payment_reference="ref_1", amount=150.0)
+        bus.publish(evt)
 
-        assert len(all_events) == 2
+        assert len(captured) == 1
+        assert captured[0].payment_reference == "ref_1"
 
-    def test_unsubscribe(self) -> None:
+    def test_unsubscribe_handler(self) -> None:
         bus = EventBus()
-        counter = [0]
+        messages: list[str] = []
 
-        def handler(event: UserRegisteredEvent) -> None:
-            counter[0] += 1
+        def handler(e: OrderPlacedEvent) -> None:
+            messages.append(e.order_id)
 
-        bus.subscribe(UserRegisteredEvent, handler)
-        bus.publish(UserRegisteredEvent(user_id="U1"))
-        assert counter[0] == 1
+        bus.register_handler(OrderPlacedEvent, handler)
+        evt = OrderPlacedEvent(order_id="1", customer_email="a@b.com", total_amount=10.0)
+        bus.publish(evt)
+        assert len(messages) == 1
 
-        bus.unsubscribe(UserRegisteredEvent, handler)
-        bus.publish(UserRegisteredEvent(user_id="U2"))
-        assert counter[0] == 1  # Unsubscribed, so not invoked
+        # Unsubscribe
+        assert bus.unsubscribe(OrderPlacedEvent, handler) is True
+        # False on repeated unsubscribe
+        assert bus.unsubscribe(OrderPlacedEvent, handler) is False
 
-    def test_error_isolation_across_handlers(self) -> None:
+        bus.publish(evt)
+        assert len(messages) == 1  # Not invoked again
+
+    def test_publish_without_subscribers(self) -> None:
         bus = EventBus()
-        successful = []
+        evt = ShipmentDispatchedEvent(order_id="999", tracking_number="TRACK123")
+        invoked = bus.publish(evt)
 
-        def failing_handler(event: DomainEvent) -> None:
-            raise RuntimeError("Database connection crashed")
+        assert invoked == 0
+        assert len(bus.event_history()) == 1
 
-        def working_handler(event: DomainEvent) -> None:
-            successful.append(event.event_id)
+    def test_event_envelope_metadata(self) -> None:
+        before = time.time()
+        evt = Event()
+        after = time.time()
 
-        bus.subscribe(DomainEvent, failing_handler)
-        bus.subscribe(DomainEvent, working_handler)
+        assert len(evt.event_id) > 10
+        assert before <= evt.timestamp <= after
 
-        count = bus.publish(DomainEvent())
+    def test_clear_bus(self) -> None:
+        bus = EventBus()
+        bus.register_handler(OrderPlacedEvent, lambda _: None)
+        bus.publish(OrderPlacedEvent(order_id="1", customer_email="a", total_amount=1))
 
-        # One succeeded, one failed
-        assert count == 1
-        assert len(successful) == 1
-        assert len(bus.failed_handlers) == 1
-        assert "Database connection crashed" in bus.failed_handlers[0][1]
+        assert len(bus.event_history()) == 1
+        bus.clear()
+        assert len(bus.event_history()) == 0
+        assert bus.publish(OrderPlacedEvent(order_id="2", customer_email="b", total_amount=2)) == 0

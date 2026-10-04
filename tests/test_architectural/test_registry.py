@@ -1,60 +1,99 @@
-"""Tests for the Registry pattern implementation."""
+"""Tests for Registry pattern implementation."""
+
+import json
 
 import pytest
 
 from design_patterns.architectural.registry import (
-    DataExporter,
+    DocumentExporter,
+    HTMLExporter,
+    JSONExporter,
+    MarkdownExporter,
     PluginRegistry,
     exporter_registry,
 )
 
 
-class TestPluginRegistry:
-    def test_builtin_exporters_registered(self) -> None:
-        available = exporter_registry.list_plugins()
-        assert "json" in available
-        assert "csv" in available
+class TestPluginRegistryLifecycle:
+    def test_register_and_get_plugin(self) -> None:
+        reg: PluginRegistry[str] = PluginRegistry("test")
+        reg.register_item("alpha", "Value A")
 
-    def test_json_export_execution(self) -> None:
-        exporter: DataExporter = exporter_registry.create("json")
-        res = exporter.export({"id": 1, "valid": True})
-        assert '"id": 1' in res
-        assert '"valid": true' in res
+        assert reg.get("alpha") == "Value A"
+        assert reg.get("ALPHA") == "Value A"  # Case-insensitive
+        assert reg.has("alpha") is True
+        assert reg.has("beta") is False
 
-    def test_csv_export_execution(self) -> None:
-        exporter: DataExporter = exporter_registry.create("csv")
-        res = exporter.export({"col1": "A", "col2": "B"})
-        assert "col1,col2" in res
-        assert "A,B" in res
+    def test_duplicate_registration_raises_value_error(self) -> None:
+        reg: PluginRegistry[int] = PluginRegistry("numbers")
+        reg.register_item("one", 1)
 
-    def test_duplicate_registration_raises(self) -> None:
-        reg = PluginRegistry("test")
+        with pytest.raises(ValueError, match="already registered"):
+            reg.register_item("one", 100, allow_overwrite=False)
 
-        @reg.register("plug")
-        class P1:
-            pass
+    def test_duplicate_registration_with_overwrite(self) -> None:
+        reg: PluginRegistry[int] = PluginRegistry("numbers")
+        reg.register_item("one", 1)
+        reg.register_item("one", 100, allow_overwrite=True)
 
-        with pytest.raises(KeyError, match="already registered"):
+        assert reg.get("one") == 100
 
-            @reg.register("plug")
-            class P2:
-                pass
+    def test_get_nonexistent_raises_key_error(self) -> None:
+        reg: PluginRegistry[str] = PluginRegistry("demo")
+        with pytest.raises(KeyError, match="No plugin registered under 'missing'"):
+            reg.get("missing")
 
-    def test_unknown_plugin_raises(self) -> None:
-        reg = PluginRegistry("test")
-        with pytest.raises(KeyError, match="Unknown plugin 'missing'"):
-            reg.create("missing")
+    def test_get_or_default(self) -> None:
+        reg: PluginRegistry[str] = PluginRegistry("demo")
+        reg.register_item("found", "exists")
 
-    def test_dynamic_plugin_registration(self) -> None:
-        reg = PluginRegistry("custom")
+        assert reg.get_or_default("found", "fallback") == "exists"
+        assert reg.get_or_default("unknown", "fallback") == "fallback"
 
-        @reg.register("xml")
-        class XmlExporter:
-            def __init__(self, root_tag: str = "root") -> None:
-                self.root = root_tag
+    def test_list_plugins_returns_sorted(self) -> None:
+        reg: PluginRegistry[str] = PluginRegistry("demo")
+        reg.register_item("zulu", "z")
+        reg.register_item("bravo", "b")
+        reg.register_item("alpha", "a")
 
-            def export(self, data: dict[str, str]) -> str:
-                return f"<{self.root}>...</{self.root}>"
+        assert reg.list_plugins() == ["alpha", "bravo", "zulu"]
 
-        plugin = reg.create("xml", root_tag="payload")
-        assert plugin.export({}) == "<payload>...</payload>"
+    def test_unregister_and_clear(self) -> None:
+        reg: PluginRegistry[str] = PluginRegistry("demo")
+        reg.register_item("p1", "1")
+        reg.register_item("p2", "2")
+
+        assert reg.unregister("p1") is True
+        assert reg.unregister("p1") is False
+        assert reg.has("p1") is False
+        assert reg.has("p2") is True
+
+        reg.clear()
+        assert len(reg.list_plugins()) == 0
+
+
+class TestBuiltinExporters:
+    def test_markdown_exporter(self) -> None:
+        exporter = MarkdownExporter()
+        out = exporter.export("Doc Title", "Body text")
+        assert out == "# Doc Title\n\nBody text"
+
+    def test_html_exporter(self) -> None:
+        exporter = HTMLExporter()
+        out = exporter.export("Doc Title", "Body text")
+        assert out == "<article><h1>Doc Title</h1><p>Body text</p></article>"
+
+    def test_json_exporter(self) -> None:
+        exporter = JSONExporter()
+        out = exporter.export("Doc Title", "Body text")
+        data = json.loads(out)
+        assert data == {"title": "Doc Title", "content": "Body text"}
+
+    def test_pre_registered_exporters(self) -> None:
+        assert "markdown" in exporter_registry.list_plugins()
+        assert "html" in exporter_registry.list_plugins()
+        assert "json" in exporter_registry.list_plugins()
+
+        exp_cls: type[DocumentExporter] = exporter_registry.get("markdown")
+        instance = exp_cls()
+        assert instance.export("T", "C") == "# T\n\nC"

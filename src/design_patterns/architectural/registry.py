@@ -1,121 +1,162 @@
-"""Registry Design Pattern.
+"""Registry Design Pattern (Plugin Architecture).
 
-Classification: Architectural / Extensible Plugin Architecture
+Classification: Architectural / Enterprise
 Intent:
-    Provide a well-known central registry where components, plugins, or strategies
-    can register themselves dynamically without modifying core application code.
+    Provide a well-known central directory or registry where components, plugins,
+    or strategies can be registered dynamically (often via decorators) and looked up
+    by name or category without hardcoded dependencies.
 
 Motivation & Real-World Analogy:
-    In CLI frameworks, serialization engines (e.g. JSON, YAML, Protocol Buffers),
-    or payment processor integrations, third-party developers need to add new
-    functionality without modifying core codebase files.
-    The Registry pattern offers a decorator-based dynamic registration mechanism
-    (`@PluginRegistry.register("name")`), allowing the system to discover and
-    instantiate plugins at runtime based on string identifiers or configuration files.
+    In extensible systems (such as web frameworks, document export engines, or machine learning pipelines),
+    applications must support pluggable extensions: exporting a document as `PDF`, `HTML`, `Markdown`,
+    or `JSON`.
+    If the document exporter uses a massive `if-elif-else` statement checking format strings, adding a new
+    format requires modifying core framework code.
+    The Registry pattern decouples plugin authors from the core dispatcher. Authors write a self-contained
+    class or function, tag it with `@registry.register("pdf")`, and the application automatically
+    discovers and dispatches to it at runtime.
 
 Mermaid Architecture Diagram:
     ```mermaid
     classDiagram
-        class Plugin {
+        class PluginRegistry~T~ {
+            -registry: dict~str, T~
+            +register(name: str, allow_overwrite: bool)
+            +get(name: str) T
+            +list_plugins() list~str~
+            +has(name: str) bool
+            +unregister(name: str) bool
+        }
+        class DocumentExporter {
             <<protocol>>
-            +execute(data: str) str
+            +export(title: str, content: str) str
         }
-        class PluginRegistry {
-            -_registry: dict[str, type]
-            +register(name: str) Callable
-            +get(name: str) type
-            +create(name: str, *args, **kwargs) Plugin
-            +list_available() list[str]
+        class MarkdownExporter {
+            +export(title: str, content: str) str
         }
-        class JsonExporter {
-            +execute(data: str) str
+        class HTMLExporter {
+            +export(title: str, content: str) str
         }
-        class YamlExporter {
-            +execute(data: str) str
+        class JSONExporter {
+            +export(title: str, content: str) str
         }
-        Plugin <|.. JsonExporter
-        Plugin <|.. YamlExporter
-        PluginRegistry o--> Plugin : registers & creates
+        DocumentExporter <|.. MarkdownExporter
+        DocumentExporter <|.. HTMLExporter
+        DocumentExporter <|.. JSONExporter
+        PluginRegistry o--> DocumentExporter : manages
     ```
 """
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
-from typing import Any, Protocol, TypeVar
+from typing import Generic, Protocol, TypeVar
 
 T = TypeVar("T")
 
 
 # ==============================================================================
-# 1. Plugin Contract (Protocol)
+# 1. Plugin Interface (Protocol)
 # ==============================================================================
-class DataExporter(Protocol):
-    """Protocol that all registered export plugins must satisfy."""
+class DocumentExporter(Protocol):
+    """Protocol for pluggable document serialization formatters."""
 
-    def export(self, data: dict[str, Any]) -> str: ...
+    def export(self, title: str, content: str) -> str: ...
 
 
 # ==============================================================================
-# 2. Registry Implementation
+# 2. Generic Plugin Registry
 # ==============================================================================
-class PluginRegistry:
-    """Centralized typed registry for discovering and instantiating plugins."""
+class PluginRegistry(Generic[T]):
+    """Central directory managing plugin registration, retrieval, and discovery."""
 
     def __init__(self, name: str = "default") -> None:
         self.name = name
-        self._registry: dict[str, type[Any]] = {}
+        self._plugins: dict[str, T] = {}
 
-    def register(self, identifier: str) -> Callable[[type[T]], type[T]]:
-        """Decorator to register a plugin class under an identifier."""
+    def register(self, key: str, allow_overwrite: bool = False) -> Callable[[T], T]:
+        """Decorator to register a plugin component under a unique lookup key."""
+        norm_key = key.lower().strip()
 
-        def decorator(cls: type[T]) -> type[T]:
-            key = identifier.lower()
-            if key in self._registry:
-                raise KeyError(f"Plugin '{identifier}' is already registered in '{self.name}'.")
-            self._registry[key] = cls
-            return cls
+        def decorator(plugin: T) -> T:
+            if not allow_overwrite and norm_key in self._plugins:
+                raise ValueError(
+                    f"Plugin '{norm_key}' is already registered in registry '{self.name}'"
+                )
+            self._plugins[norm_key] = plugin
+            return plugin
 
         return decorator
 
-    def get_class(self, identifier: str) -> type[Any]:
-        key = identifier.lower()
-        if key not in self._registry:
-            available = ", ".join(self._registry.keys()) or "none"
-            raise KeyError(
-                f"Unknown plugin '{identifier}' in '{self.name}'. Available: {available}"
-            )
-        return self._registry[key]
+    def register_item(self, key: str, item: T, allow_overwrite: bool = False) -> None:
+        """Programmatic registration without decorator."""
+        self.register(key, allow_overwrite=allow_overwrite)(item)
 
-    def create(self, identifier: str, *args: Any, **kwargs: Any) -> Any:
-        cls = self.get_class(identifier)
-        return cls(*args, **kwargs)
+    def get(self, key: str) -> T:
+        """Retrieve plugin by key; raises KeyError if not found."""
+        norm_key = key.lower().strip()
+        if norm_key not in self._plugins:
+            raise KeyError(
+                f"No plugin registered under '{norm_key}' in registry '{self.name}'. "
+                f"Available: {self.list_plugins()}"
+            )
+        return self._plugins[norm_key]
+
+    def get_or_default(self, key: str, default: T) -> T:
+        """Retrieve plugin by key, or return default fallback if absent."""
+        norm_key = key.lower().strip()
+        return self._plugins.get(norm_key, default)
 
     def list_plugins(self) -> list[str]:
-        return sorted(self._registry.keys())
+        """Return sorted list of all registered plugin identifiers."""
+        return sorted(self._plugins.keys())
 
+    def has(self, key: str) -> bool:
+        """Check if a plugin identifier exists in the registry."""
+        return key.lower().strip() in self._plugins
 
-# Global Exporters Registry
-exporter_registry = PluginRegistry("exporters")
+    def unregister(self, key: str) -> bool:
+        """Remove a plugin from the registry."""
+        norm_key = key.lower().strip()
+        if norm_key in self._plugins:
+            del self._plugins[norm_key]
+            return True
+        return False
+
+    def clear(self) -> None:
+        """Remove all registered plugins."""
+        self._plugins.clear()
 
 
 # ==============================================================================
-# 3. Built-in Plugins using Registry Decorator
+# 3. Concrete Exporter Plugins
 # ==============================================================================
+exporter_registry: PluginRegistry[type[DocumentExporter]] = PluginRegistry("exporters")
+
+
+@exporter_registry.register("markdown")
+class MarkdownExporter:
+    """Exports document content as formatted Markdown."""
+
+    def export(self, title: str, content: str) -> str:
+        return f"# {title}\n\n{content}"
+
+
+@exporter_registry.register("html")
+class HTMLExporter:
+    """Exports document content as HTML markup."""
+
+    def export(self, title: str, content: str) -> str:
+        return f"<article><h1>{title}</h1><p>{content}</p></article>"
+
+
 @exporter_registry.register("json")
-class JsonExporter:
-    def export(self, data: dict[str, Any]) -> str:
-        import json
+class JSONExporter:
+    """Exports document content as structured JSON string."""
 
-        return json.dumps(data)
-
-
-@exporter_registry.register("csv")
-class CsvExporter:
-    def export(self, data: dict[str, Any]) -> str:
-        headers = ",".join(data.keys())
-        values = ",".join(str(v) for v in data.values())
-        return f"{headers}\n{values}"
+    def export(self, title: str, content: str) -> str:
+        return json.dumps({"title": title, "content": content}, indent=2)
 
 
 # ==============================================================================
@@ -124,9 +165,20 @@ class CsvExporter:
 if __name__ == "__main__":
     print(f"Available Exporters: {exporter_registry.list_plugins()}")
 
-    # Dynamically select exporter based on config or runtime input
-    json_plugin: DataExporter = exporter_registry.create("json")
-    print(json_plugin.export({"status": "active", "code": 200}))
+    # Dispatch via registry lookup
+    format_choice = "markdown"
+    exporter_cls = exporter_registry.get(format_choice)
+    exporter = exporter_cls()
+    output = exporter.export("System Architecture", "Overview of core modules.")
+    print("\nGenerated Markdown Export:")
+    print(output)
 
-    csv_plugin: DataExporter = exporter_registry.create("csv")
-    print(csv_plugin.export({"status": "active", "code": 200}))
+    # Dynamic registration at runtime
+    @exporter_registry.register("text")
+    class PlainTextExporter:
+        def export(self, title: str, content: str) -> str:
+            return f"TITLE: {title.upper()}\nCONTENT: {content}"
+
+    print(f"\nUpdated Exporters: {exporter_registry.list_plugins()}")
+    txt_out = exporter_registry.get("text")().export("Notes", "Plain info")
+    print(txt_out)

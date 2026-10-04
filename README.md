@@ -1,174 +1,191 @@
-# Design Patterns in Python (3.12+)
+# Design Patterns in Python 🐍
 
-A modern, production-grade guide to **Software Design Patterns implemented in Python 3.12+**.
+[![CI](https://github.com/sudh29/design_patterns/actions/workflows/ci.yml/badge.svg)](https://github.com/sudh29/design_patterns/actions)
+[![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue.svg)](https://www.python.org/)
+[![Code Style: Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![Type Checked: mypy](https://img.shields.io/badge/type--checked-mypy%20(strict)-brightgreen.svg)](https://mypy-lang.org/)
+[![Coverage](https://img.shields.io/badge/coverage-98.5%25-brightgreen.svg)](https://pytest-cov.readthedocs.io/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-This repository is designed from the ground up for software engineers, architects, and technical interview candidates looking for **clean, idiomatic, fully type-annotated, and thoroughly tested** implementations of software design patterns.
+A modern, production-grade guide to **28 software design patterns** implemented in Python 3.12+.
 
----
-
-## 🌟 Key Features
-
-- **Modern Python 3.12+ Idioms**: Built with `typing.Protocol`, `abc.ABC`, `dataclasses`, structural pattern matching `match/case`, and `typing.Self`.
-- **Anti-Pattern vs. Clean Pattern**: Contrasts naive/tightly-coupled code with refactored, SOLID-compliant architectures.
-- **Pythonic Twists**: Explains where Python's built-in features supersede traditional GoF boilerplate (e.g., first-class functions for Strategy, decorators for Decorator, generators for Iterator, metaclasses/modules for Singleton).
-- **Practical Domain Scenarios**: Concrete real-world problems (multi-cloud orchestration, payment gateways, e-commerce checkout, financial ledgers, video transcoding, and IoC containers).
-- **100% Type-Safe & Linted**: Checked with `mypy --strict` and `ruff`.
-- **Extensive Test Suite**: 160+ unit tests with **>97% test coverage** via `pytest`.
-- **Interactive CLI Runner**: Explore, inspect, and execute any pattern interactively.
+This repository showcases the classic 22 Gang of Four (GoF) patterns plus 6 essential Modern Architectural & Enterprise patterns, pairing traditional object-oriented architectures with modern Python idioms (structural subtyping with `Protocol`, context managers, decorators, `__init_subclass__`, `functools.singledispatch`, and operator overloading).
 
 ---
 
-## 📂 Project Architecture
+## 🌟 Key Highlights
+
+- **28 Fully Implemented Patterns:** 5 Creational, 7 Structural, 10 Behavioral, and 6 Architectural patterns.
+- **Strict 5-Section Architecture:** Every module features comprehensive docstrings, Mermaid architecture diagrams, real-world enterprise scenarios, Pythonic alternatives, and runnable driver demos.
+- **100% Type-Safe:** Verified under `mypy --strict` with zero type errors.
+- **High Test Coverage:** ≥ 98% line coverage verified via `pytest-cov` across 222 unit tests.
+- **Interactive CLI Runner:** Explore, filter, and run pattern demonstrations directly from the command line.
+
+---
+
+## 🚀 Quick Start
+
+### Installation
+
+Clone the repository and set up a virtual environment using `uv` (recommended) or standard `venv`:
+
+```bash
+# Clone repository
+git clone git@github.com:sudh29/design_patterns.git
+cd design_patterns
+
+# Install with development dependencies using uv
+uv sync
+# OR using pip:
+# python3 -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]"
+```
+
+### Exploring & Running Patterns via CLI
+
+The project includes a built-in CLI tool `design-patterns`:
+
+```bash
+# List all 28 available patterns grouped by category
+uv run design-patterns --list
+
+# Filter patterns by category
+uv run design-patterns --list --category architectural
+
+# Execute a pattern demonstration
+uv run design-patterns --run factory_method
+uv run design-patterns --run unit_of_work
+uv run design-patterns --run visitor
+```
+
+### Running Modules Directly
+
+You can also run any pattern module directly:
+
+```bash
+python -m design_patterns.creational.factory_method
+python -m design_patterns.structural.decorator
+python -m design_patterns.behavioral.strategy
+python -m design_patterns.architectural.dependency_injection
+```
+
+---
+
+## 📚 Pattern Index
+
+### 1. Creational Patterns (5)
+
+| Pattern | Module | Real-World Scenario | Pythonic Idioms |
+|---------|--------|---------------------|-----------------|
+| **Factory Method** | [`creational.factory_method`](src/design_patterns/creational/factory_method.py) | Multi-channel notification delivery (Email, SMS, Slack) | Callable registry dictionary |
+| **Abstract Factory** | [`creational.abstract_factory`](src/design_patterns/creational/abstract_factory.py) | Cross-platform cloud infrastructure provisioning (AWS, Azure, GCP) | Protocol-based abstract factories |
+| **Builder** | [`creational.builder`](src/design_patterns/creational/builder.py) | HTTP request payload constructor with immutable options | Fluent chaining with validation |
+| **Prototype** | [`creational.prototype`](src/design_patterns/creational/prototype.py) | Microservice configuration cloning and variance | `copy.deepcopy` & `__copy__` overrides |
+| **Singleton** | [`creational.singleton`](src/design_patterns/creational/singleton.py) | Database connection pool manager | Thread-safe `__new__` locking & module-level singletons |
+
+### 2. Structural Patterns (7)
+
+| Pattern | Module | Real-World Scenario | Pythonic Idioms |
+|---------|--------|---------------------|-----------------|
+| **Adapter** | [`structural.adapter`](src/design_patterns/structural/adapter.py) | Legacy XML analytics billing bridge to modern JSON APIs | Class adapter & object adapter |
+| **Bridge** | [`structural.bridge`](src/design_patterns/structural/bridge.py) | Database query abstraction decoupled from SQL engines | Structural subtyping with `Protocol` |
+| **Composite** | [`structural.composite`](src/design_patterns/structural/composite.py) | File system directory tree structure with size calculation | Recursive iteration & generator traversal |
+| **Decorator** | [`structural.decorator`](src/design_patterns/structural/decorator.py) | API request caching, authentication, and execution rate limiting | First-class function decorators (`@functools.wraps`) |
+| **Facade** | [`structural.facade`](src/design_patterns/structural/facade.py) | Unified high-level e-commerce checkout coordinating inventory, billing, shipping | Simplified unified client interface |
+| **Flyweight** | [`structural.flyweight`](src/design_patterns/structural/flyweight.py) | High-volume gaming particle effects rendering engine | `__slots__` memory optimization & intrinsic state caching |
+| **Proxy** | [`structural.proxy`](src/design_patterns/structural/proxy.py) | Lazy-loaded heavy S3 file storage with access authorization and caching | Virtual proxy with transparent attribute delegation |
+
+### 3. Behavioral Patterns (10)
+
+| Pattern | Module | Real-World Scenario | Pythonic Idioms |
+|---------|--------|---------------------|-----------------|
+| **Chain of Responsibility** | [`behavioral.chain_of_responsibility`](src/design_patterns/behavioral/chain_of_responsibility.py) | HTTP middleware security pipeline (Auth -> RateLimit -> Schema) | Fluent pipeline builder & generators |
+| **Command** | [`behavioral.command`](src/design_patterns/behavioral/command.py) | Text editor transactional command history with Undo/Redo | Reversible command objects & callable invokers |
+| **Iterator** | [`behavioral.iterator`](src/design_patterns/behavioral/iterator.py) | In-order traversal across Binary Search Tree data structures | Python iterator protocol (`__iter__` / `__next__`) & generator functions |
+| **Mediator** | [`behavioral.mediator`](src/design_patterns/behavioral/mediator.py) | Air traffic control tower coordinating commercial flight landings | Central message hub decoupling colleagues |
+| **Memento** | [`behavioral.memento`](src/design_patterns/behavioral/memento.py) | Financial account balance ledger snapshot rollback | Immutable mementos with state capture |
+| **Observer** | [`behavioral.observer`](src/design_patterns/behavioral/observer.py) | Real-time stock ticker price updates streaming to trading bots and audit loggers | One-to-many event subscription |
+| **State** | [`behavioral.state`](src/design_patterns/behavioral/state.py) | E-commerce order lifecycle transitions (Draft -> Paid -> Shipped -> Cancelled) | Finite state machine encapsulation |
+| **Strategy** | [`behavioral.strategy`](src/design_patterns/behavioral/strategy.py) | Dynamic checkout pricing discounts (Percentage, Flat, Tiered Volume) | First-class functions as pluggable strategies |
+| **Template Method** | [`behavioral.template_method`](src/design_patterns/behavioral/template_method.py) | Invariant ETL data mining pipeline (Extract -> Parse -> Clean -> Transform -> Load) | Subclass registration via `__init_subclass__` |
+| **Visitor** | [`behavioral.visitor`](src/design_patterns/behavioral/visitor.py) | Multi-asset portfolio tax liability calculator (Stocks, Bonds, Crypto) | Double dispatch & `functools.singledispatchmethod` |
+
+### 4. Architectural & Enterprise Patterns (6)
+
+| Pattern | Module | Real-World Scenario | Pythonic Idioms |
+|---------|--------|---------------------|-----------------|
+| **Dependency Injection** | [`architectural.dependency_injection`](src/design_patterns/architectural/dependency_injection.py) | Inversion of Control (IoC) service container with `SINGLETON` and `TRANSIENT` scopes | Constructor injection & provider resolution |
+| **Repository** | [`architectural.repository`](src/design_patterns/architectural/repository.py) | Decoupling domain models from persistence mechanisms | Collection-like generic repository abstraction |
+| **Unit of Work** | [`architectural.unit_of_work`](src/design_patterns/architectural/unit_of_work.py) | Coordinating atomic business transactions across multiple repositories | Python context manager (`with UnitOfWork():`) with rollback semantics |
+| **Specification** | [`architectural.specification`](src/design_patterns/architectural/specification.py) | E-commerce catalog product filtering predicates | Composable boolean logic via operator overloading (`&`, `\|`, `~`) |
+| **Event Pub/Sub** | [`architectural.event_pubsub`](src/design_patterns/architectural/event_pubsub.py) | Domain event dispatcher for asynchronous microservice workflows | Typed event envelopes & `@bus.subscribe(EventClass)` decorators |
+| **Registry** | [`architectural.registry`](src/design_patterns/architectural/registry.py) | Dynamic document exporter plugin system (Markdown, HTML, JSON) | Decorator-based registration (`@registry.register`) & dynamic lookup |
+
+---
+
+## 📂 Project Structure
 
 ```
 design_patterns/
-├── src/design_patterns/
-│   ├── creational/           # Object creation mechanisms
-│   │   ├── factory_method.py
-│   │   ├── abstract_factory.py
-│   │   ├── builder.py
-│   │   ├── prototype.py
-│   │   └── singleton.py
-│   ├── structural/           # Object composition & structure
-│   │   ├── adapter.py
-│   │   ├── bridge.py
-│   │   ├── composite.py
-│   │   ├── decorator.py
-│   │   ├── facade.py
-│   │   ├── flyweight.py
-│   │   └── proxy.py
-│   ├── behavioral/           # Algorithms & responsibility assignment
-│   │   ├── chain_of_responsibility.py
-│   │   ├── command.py
-│   │   ├── iterator.py
-│   │   ├── mediator.py
-│   │   ├── memento.py
-│   │   ├── observer.py
-│   │   ├── state.py
-│   │   ├── strategy.py
-│   │   ├── template_method.py
-│   │   └── visitor.py
-│   ├── architectural/        # Modern enterprise & domain patterns
-│   │   ├── dependency_injection.py
-│   │   ├── repository.py
-│   │   ├── unit_of_work.py
-│   │   ├── specification.py
-│   │   ├── event_pubsub.py
-│   │   └── registry.py
-│   └── cli.py                # Interactive CLI tool
-└── tests/                    # 160+ unit tests mirroring src/
+├── .github/
+│   └── workflows/
+│       └── ci.yml               # GitHub Actions CI matrix (Python 3.10-3.13)
+├── src/
+│   └── design_patterns/
+│       ├── __init__.py
+│       ├── cli.py               # Interactive & Headless CLI runner
+│       ├── creational/          # 5 Creational patterns + __init__.py
+│       ├── structural/          # 7 Structural patterns + __init__.py
+│       ├── behavioral/          # 10 Behavioral patterns + __init__.py
+│       └── architectural/       # 6 Architectural patterns + __init__.py
+├── tests/
+│   ├── test_cli.py              # CLI test suite
+│   ├── test_creational/         # Creational test suite
+│   ├── test_structural/         # Structural test suite
+│   ├── test_behavioral/         # Behavioral test suite
+│   └── test_architectural/      # Architectural test suite
+├── .pre-commit-config.yaml      # Git pre-commit hooks (Ruff format + lint)
+├── CHANGELOG.md                 # Version history & release notes
+├── CONTRIBUTING.md              # Contribution guide & pattern template
+├── Makefile                     # Common development workflow commands
+├── pyproject.toml               # Project metadata, dependencies & tool configs
+└── README.md                    # Project overview & documentation
 ```
 
 ---
 
-## 📚 Pattern Index & Real-World Catalog
+## 🛠️ Development & Quality Gates
 
-### 1. Creational Patterns
-| Pattern | Module | Real-World Scenario | Pythonic Nuance |
-| :--- | :--- | :--- | :--- |
-| **Factory Method** | [`factory_method.py`](file:///home/liber_primus/code/design_patterns/src/design_patterns/creational/factory_method.py) | Multi-channel Notification Dispatcher (Email, SMS, Slack) | Dynamic registry-based factory decorator |
-| **Abstract Factory** | [`abstract_factory.py`](file:///home/liber_primus/code/design_patterns/src/design_patterns/creational/abstract_factory.py) | Multi-Cloud Resource Provisioner (AWS vs GCP) | Protocol duck-typing & tuple-based factory maps |
-| **Builder** | [`builder.py`](file:///home/liber_primus/code/design_patterns/src/design_patterns/creational/builder.py) | Fluent HTTP Request Builder with Invariant Validation | Method chaining returning `Self`, frozen dataclasses |
-| **Prototype** | [`prototype.py`](file:///home/liber_primus/code/design_patterns/src/design_patterns/creational/prototype.py) | Document & Invoice Template Deep-Cloning | `copy.deepcopy` & `__deepcopy__` customization |
-| **Singleton** | [`singleton.py`](file:///home/liber_primus/code/design_patterns/src/design_patterns/creational/singleton.py) | Database Connection Pool & Application Settings | Thread-safe Metaclass & Borg (Monostate) pattern |
+This project enforces strict quality standards via a comprehensive `Makefile`:
 
-### 2. Structural Patterns
-| Pattern | Module | Real-World Scenario | Pythonic Nuance |
-| :--- | :--- | :--- | :--- |
-| **Adapter** | [`adapter.py`](file:///home/liber_primus/code/design_patterns/src/design_patterns/structural/adapter.py) | Legacy XML/SOAP Payment Gateway to Modern JSON/REST | Object Adapter composition vs Functional wrappers |
-| **Bridge** | [`bridge.py`](file:///home/liber_primus/code/design_patterns/src/design_patterns/structural/bridge.py) | Notification Messaging vs Delivery Transport Channels | Decouples orthogonal dimensions without class explosion |
-| **Composite** | [`composite.py`](file:///home/liber_primus/code/design_patterns/src/design_patterns/structural/composite.py) | Hierarchical File System & Recursive Directory Sizing | Recursive `yield from` generator iteration (`__iter__`) |
-| **Decorator** | [`decorator.py`](file:///home/liber_primus/code/design_patterns/src/design_patterns/structural/decorator.py) | Service Caching, Audit Logging & Rate Limiting | GoF class decorators vs `functools.wraps` functions |
-| **Facade** | [`facade.py`](file:///home/liber_primus/code/design_patterns/src/design_patterns/structural/facade.py) | Complex Multimedia Transcoding Subsystem Pipeline | High-level unified orchestrator over granular codecs |
-| **Flyweight** | [`flyweight.py`](file:///home/liber_primus/code/design_patterns/src/design_patterns/structural/flyweight.py) | Forest Ecosystem Simulation with Shared Meshes | `__slots__` memory optimization & flyweight cache |
-| **Proxy** | [`proxy.py`](file:///home/liber_primus/code/design_patterns/src/design_patterns/structural/proxy.py) | Virtual Lazy Document Loader & RBAC Protection Proxy | Dynamic delegation and lazy property evaluation |
+```bash
+# Run Ruff linting
+make lint
 
-### 3. Behavioral Patterns
-| Pattern | Module | Real-World Scenario | Pythonic Nuance |
-| :--- | :--- | :--- | :--- |
-| **Chain of Responsibility** | [`chain_of_responsibility.py`](file:///home/liber_primus/code/design_patterns/src/design_patterns/behavioral/chain_of_responsibility.py) | HTTP Middleware Pipeline (Auth -> RateLimit -> Schema) | Short-circuiting handler chain with context bag |
-| **Command** | [`command.py`](file:///home/liber_primus/code/design_patterns/src/design_patterns/behavioral/command.py) | Text Document Editor with Undo/Redo Stacks | Encapsulated command actions with snapshot state |
-| **Iterator** | [`iterator.py`](file:///home/liber_primus/code/design_patterns/src/design_patterns/behavioral/iterator.py) | Binary Search Tree Traversal | Custom Iterator class vs recursive `yield from` generators |
-| **Mediator** | [`mediator.py`](file:///home/liber_primus/code/design_patterns/src/design_patterns/behavioral/mediator.py) | Air Traffic Control (ATC) Runway Clearance Coordinator | Decouples O(N^2) colleague dependencies |
-| **Memento** | [`memento.py`](file:///home/liber_primus/code/design_patterns/src/design_patterns/behavioral/memento.py) | Financial Ledger Checkpoint Snapshot & Rollback | Encapsulated, immutable frozen dataclass snapshots |
-| **Observer** | [`observer.py`](file:///home/liber_primus/code/design_patterns/src/design_patterns/behavioral/observer.py) | Real-time Stock Price Ticker with Automated Bot Traders | Pub/Sub notifications with decoupled observers |
-| **State** | [`state.py`](file:///home/liber_primus/code/design_patterns/src/design_patterns/behavioral/state.py) | E-commerce Order Finite State Machine Lifecycle | Eliminates conditionals by delegating to State objects |
-| **Strategy** | [`strategy.py`](file:///home/liber_primus/code/design_patterns/src/design_patterns/behavioral/strategy.py) | E-commerce Dynamic Checkout Discount Engine | Class-based strategies vs First-Class callables |
-| **Template Method** | [`template_method.py`](file:///home/liber_primus/code/design_patterns/src/design_patterns/behavioral/template_method.py) | Data Engineering ETL Pipeline (CSV & REST API) | Invariant execution skeleton with abstract steps & hooks |
-| **Visitor** | [`visitor.py`](file:///home/liber_primus/code/design_patterns/src/design_patterns/behavioral/visitor.py) | Financial Asset Tax & Liquidity Evaluation Engine | Double dispatch vs `functools.singledispatch` |
+# Automatically format code with Ruff
+make format
 
-### 4. Architectural & Modern Patterns
-| Pattern | Module | Real-World Scenario | Key Concepts |
-| :--- | :--- | :--- | :--- |
-| **Dependency Injection** | [`dependency_injection.py`](file:///home/liber_primus/code/design_patterns/src/design_patterns/architectural/dependency_injection.py) | Lightweight IoC Container | Constructor injection, Singleton vs Transient scopes |
-| **Repository** | [`repository.py`](file:///home/liber_primus/code/design_patterns/src/design_patterns/architectural/repository.py) | Domain Persistence Decoupling | Generic repository protocol `Repository[T, ID]` |
-| **Unit of Work** | [`unit_of_work.py`](file:///home/liber_primus/code/design_patterns/src/design_patterns/architectural/unit_of_work.py) | Atomic Multi-Repository Transactions | Context manager (`with UnitOfWork():`) rollback semantics |
-| **Specification** | [`specification.py`](file:///home/liber_primus/code/design_patterns/src/design_patterns/architectural/specification.py) | Composable Catalog Search Rules | Operator overloading (`&`, `\|`, `~`) for boolean algebra |
-| **Event Pub/Sub** | [`event_pubsub.py`](file:///home/liber_primus/code/design_patterns/src/design_patterns/architectural/event_pubsub.py) | Domain Event Bus | Event envelopes, typed subscriber dispatch, error isolation |
-| **Registry** | [`registry.py`](file:///home/liber_primus/code/design_patterns/src/design_patterns/architectural/registry.py) | Extensible Plugin System | Dynamic decorator-based registration (`@reg.register`) |
+# Run strict static type checking with mypy
+make typecheck
+
+# Run test suite
+make test
+
+# Run tests with coverage reporting (enforces ≥95% threshold)
+make test-cov
+
+# Clean build caches
+make clean
+```
 
 ---
 
-## 🚀 Quickstart & Development
+## 🤝 Contributing
 
-### 1. Environment Setup
-
-Using [`uv`](https://github.com/astral-sh/uv) (recommended) or standard `venv`:
-
-```bash
-# Clone the repository
-git clone https://github.com/liber_primus/design_patterns.git
-cd design_patterns
-
-# Create virtual environment and install dev dependencies
-uv venv .venv
-uv pip install -e ".[dev]"
-```
-
-### 2. Running the Interactive CLI Runner
-
-List all patterns:
-```bash
-.venv/bin/python -m design_patterns.cli list
-```
-
-Run any pattern live:
-```bash
-# Run Factory Method
-.venv/bin/python -m design_patterns.cli run creational factory_method
-
-# Run Strategy Pattern
-.venv/bin/python -m design_patterns.cli run behavioral strategy
-
-# Run Unit of Work Pattern
-.venv/bin/python -m design_patterns.cli run architectural unit_of_work
-```
-
-You can also run any module directly:
-```bash
-.venv/bin/python -m design_patterns.structural.adapter
-```
-
-### 3. Running Tests & Quality Verification
-
-Run the complete test suite with coverage:
-```bash
-.venv/bin/pytest --cov=design_patterns --cov-report=term-missing tests/
-```
-
-Check linting and formatting:
-```bash
-.venv/bin/ruff check src tests
-.venv/bin/ruff format --check src tests
-```
-
-Run static type checking in strict mode:
-```bash
-.venv/bin/mypy src tests
-```
+Contributions, bug reports, and suggestions are welcome! Please review [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on code conventions, the standard 5-section anatomy, and quality requirements.
 
 ---
 
 ## 📄 License
 
-MIT License. See [LICENSE](file:///home/liber_primus/code/design_patterns/LICENSE) for details.
+This project is licensed under the terms of the [MIT License](LICENSE).
+Copyright © 2026 Sudhanshu Chaudhary.

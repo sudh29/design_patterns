@@ -94,6 +94,13 @@ class TieredVolumeDiscount:
         return total
 
 
+class NoDiscount:
+    """Default strategy that applies no discount."""
+
+    def apply_discount(self, total: float) -> float:
+        return total
+
+
 # ==============================================================================
 # 2. Context: Checkout Cart
 # ==============================================================================
@@ -102,7 +109,7 @@ class CheckoutCart:
 
     def __init__(self, strategy: DiscountStrategy | None = None) -> None:
         self._items: list[float] = []
-        self._strategy: DiscountStrategy = strategy or (lambda total: total)  # type: ignore[assignment]
+        self._strategy: DiscountStrategy = strategy if strategy is not None else NoDiscount()
 
     def add_item(self, price: float) -> None:
         if price <= 0:
@@ -123,6 +130,16 @@ class CheckoutCart:
 # 3. Pythonic Twist: First-Class Functions as Strategies
 # ==============================================================================
 PricingFunction = Callable[[float], float]
+
+
+class FuncStrategyAdapter:
+    """Adapts a standalone pricing callable to the DiscountStrategy protocol."""
+
+    def __init__(self, fn: PricingFunction) -> None:
+        self.fn = fn
+
+    def apply_discount(self, total: float) -> float:
+        return self.fn(total)
 
 
 def apply_vip_club_discount(total: float) -> float:
@@ -147,12 +164,5 @@ if __name__ == "__main__":
     print(f"Tiered Strategy: ${cart.final_price():.2f}")
 
     # Switch to Pythonic Function strategy
-    class FuncStrategyAdapter:
-        def __init__(self, fn: PricingFunction) -> None:
-            self.fn = fn
-
-        def apply_discount(self, total: float) -> float:
-            return self.fn(total)
-
     cart.set_strategy(FuncStrategyAdapter(apply_vip_club_discount))
     print(f"VIP Function Strategy: ${cart.final_price():.2f}")
