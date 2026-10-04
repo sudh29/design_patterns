@@ -2,161 +2,199 @@
 
 Classification: Architectural / Enterprise
 Intent:
-    Maintains a list of objects affected by a business transaction and coordinates
+    Maintain a list of objects affected by a business transaction and coordinate
     the writing out of changes and the resolution of concurrency problems.
+    Guarantees atomic commit or rollback across multiple repositories.
 
 Motivation & Real-World Analogy:
-    In financial funds transfers or e-commerce checkouts, multiple repositories are
-    involved (e.g., `AccountRepository` and `AuditLogRepository`, or `OrderRepository` and `InventoryRepository`).
-    If an operation modifies Account A, then attempts to modify Account B but fails,
-    leaving Account A debited without Account B credited results in corrupt data.
-    The Unit of Work pattern bundles multiple operations into an atomic transaction,
-    leveraging Python's `with` context manager protocol (`__enter__` and `__exit__`)
-    to guarantee commit or rollback semantics.
+    In complex business workflows—such as transferring funds between bank accounts
+    or placing an e-commerce order (which reserves inventory, deducts customer credit,
+    and creates a shipping order)—multiple entities across multiple tables or repositories
+    are mutated.
+    If each repository executes changes immediately and independently, a failure halfway through
+    (e.g., deducting funds succeeds but crediting the destination fails) leaves the database
+    in an inconsistent, corrupt state.
+    The Unit of Work pattern tracks all newly created, modified, and deleted entities within
+    a transaction boundary. In Python, it is idiomatically implemented as a context manager:
+    if the code block finishes without exceptions, changes are committed atomically;
+    if any exception occurs, changes are rolled back completely.
 
 Mermaid Architecture Diagram:
     ```mermaid
     classDiagram
         class AbstractUnitOfWork {
-            <<protocol>>
-            +__enter__() Self
-            +__exit__(exc_type, exc_val, exc_tb)
-            +commit()
-            +rollback()
+            <<abstract>>
+            +__enter__() AbstractUnitOfWork
+            +__exit__(exc_type, exc_val, exc_tb) bool
+            +commit()* void
+            +rollback()* void
         }
-        class SqlAlchemyStyleUnitOfWork {
+        class InMemoryUnitOfWork {
             -committed: bool
             -rolled_back: bool
-            +accounts: AccountRepository
-            +audit_logs: list[str]
-            +commit()
-            +rollback()
+            +accounts: dict
+            +ledger: list
+            +commit() void
+            +rollback() void
         }
-        AbstractUnitOfWork <|.. SqlAlchemyStyleUnitOfWork
+        class BankTransferService {
+            -uow: InMemoryUnitOfWork
+            +transfer(from_id, to_id, amount) void
+        }
+        AbstractUnitOfWork <|-- InMemoryUnitOfWork
+        BankTransferService o--> InMemoryUnitOfWork : manages transaction
     ```
 """
 
 from __future__ import annotations
 
-import copy
-from typing import Any, Protocol, Self
+from abc import ABC, abstractmethod
+from copy import deepcopy
+from dataclasses import dataclass
+from types import TracebackType
 
 
 # ==============================================================================
-# 1. Domain Model & Repository
+# 1. Domain Entities
 # ==============================================================================
-class BankAccount:
-    def __init__(self, account_id: str, balance: float) -> None:
-        self.account_id = account_id
-        self.balance = balance
+@dataclass
+class Account:
+    """Bank account domain entity."""
 
+    id: str
+    owner: str
+    balance: float
 
-class AccountRepository:
-    def __init__(self, data: dict[str, BankAccount]) -> None:
-        self._data = data
+    def debit(self, amount: float) -> None:
+        if amount <= 0:
+            raise ValueError("Debit amount must be positive")
+        if self.balance < amount:
+            raise ValueError(f"Insufficient funds: available {self.balance}, requested {amount}")
+        self.balance -= amount
 
-    def get(self, account_id: str) -> BankAccount:
-        if account_id not in self._data:
-            raise KeyError(f"Account {account_id} not found")
-        return self._data[account_id]
+    def credit(self, amount: float) -> None:
+        if amount <= 0:
+            raise ValueError("Credit amount must be positive")
+        self.balance += amount
 
 
 # ==============================================================================
-# 2. Unit of Work Protocol & Implementation
+# 2. Abstract Unit of Work Context Manager
 # ==============================================================================
-class AbstractUnitOfWork(Protocol):
-    """Context manager protocol orchestrating atomic business transactions."""
+class AbstractUnitOfWork(ABC):
+    """Abstract Context Manager defining Unit of Work atomic transaction boundaries."""
 
-    def __enter__(self) -> Self: ...
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> bool: ...
-    def commit(self) -> None: ...
-    def rollback(self) -> None: ...
+    def __enter__(self) -> AbstractUnitOfWork:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool:
+        if exc_type is not None:
+            self.rollback()
+            return False  # Propagate exception to caller
+        self.commit()
+        return True
+
+    @abstractmethod
+    def commit(self) -> None:
+        """Atomically persist pending changes."""
+        ...
+
+    @abstractmethod
+    def rollback(self) -> None:
+        """Discard uncommitted modifications and restore previous state."""
+        ...
 
 
-class FakeUnitOfWork:
-    """Atomic Unit of Work with rollback isolation for multi-repository operations."""
+# ==============================================================================
+# 3. Concrete In-Memory Unit of Work Implementation
+# ==============================================================================
+class InMemoryUnitOfWork(AbstractUnitOfWork):
+    """In-memory Unit of Work supporting snapshot-based rollback semantics."""
 
-    def __init__(self, initial_accounts: dict[str, BankAccount]) -> None:
-        self._live_accounts = initial_accounts
-        # Working sandbox copy
-        self._working_accounts: dict[str, BankAccount] = {}
-        self.committed = False
-        self.rolled_back = False
+    def __init__(self, initial_accounts: dict[str, Account] | None = None) -> None:
+        # Canonical datastore
+        self._datastore: dict[str, Account] = initial_accounts or {}
+        # Working state for current transaction
+        self.accounts: dict[str, Account] = {}
+        # Audit log of ledger events
+        self.ledger: list[str] = []
+        self._ledger_snapshot: list[str] = []
+        self.committed: bool = False
+        self.rolled_back: bool = False
 
-    def __enter__(self) -> FakeUnitOfWork:
-        # Clone current state into sandbox on entering transaction
-        self._working_accounts = {
-            acc_id: copy.deepcopy(acc) for acc_id, acc in self._live_accounts.items()
-        }
-        self.accounts = AccountRepository(self._working_accounts)
+    def __enter__(self) -> InMemoryUnitOfWork:
+        # Create an isolated working copy of datastore for this transaction
+        self.accounts = deepcopy(self._datastore)
+        self._ledger_snapshot = list(self.ledger)
         self.committed = False
         self.rolled_back = False
         return self
 
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> bool:
-        if exc_type is not None:
-            # Exception occurred inside with-block -> automatic rollback
-            self.rollback()
-            return False  # Re-raise exception
-        elif not self.committed:
-            # User forgot to commit explicitly -> rollback safely
-            self.rollback()
-        return True
-
     def commit(self) -> None:
-        # Atomic commit: Apply sandbox modifications to live storage
-        self._live_accounts.clear()
-        self._live_accounts.update(self._working_accounts)
+        """Apply working copies into canonical datastore."""
+        self._datastore = deepcopy(self.accounts)
         self.committed = True
 
     def rollback(self) -> None:
-        # Discard sandbox changes
-        self._working_accounts.clear()
+        """Revert working copies back to last committed datastore state."""
+        self.accounts = deepcopy(self._datastore)
+        self.ledger = list(self._ledger_snapshot)
         self.rolled_back = True
 
-
-# ==============================================================================
-# 3. Transfer Service Coordinating Transaction
-# ==============================================================================
-def transfer_funds(uow: FakeUnitOfWork, sender_id: str, receiver_id: str, amount: float) -> None:
-    if amount <= 0:
-        raise ValueError("Transfer amount must be positive")
-
-    with uow:
-        sender = uow.accounts.get(sender_id)
-        receiver = uow.accounts.get(receiver_id)
-
-        if sender.balance < amount:
-            raise ValueError(f"Insufficient funds: {sender.balance} < {amount}")
-
-        sender.balance -= amount
-        receiver.balance += amount
-        uow.commit()
+    def get_account(self, account_id: str) -> Account:
+        """Helper to get account from active transaction context."""
+        if account_id not in self.accounts:
+            raise KeyError(f"Account {account_id} not found")
+        return self.accounts[account_id]
 
 
 # ==============================================================================
-# 4. Driver / Demonstration
+# 4. Service / Application Coordinator
+# ==============================================================================
+class BankTransferService:
+    """Coordinates account transfers inside Unit of Work transaction boundaries."""
+
+    def __init__(self, uow: InMemoryUnitOfWork) -> None:
+        self.uow = uow
+
+    def transfer(self, from_id: str, to_id: str, amount: float) -> None:
+        """Execute funds transfer atomically across accounts."""
+        with self.uow:
+            from_acc = self.uow.get_account(from_id)
+            to_acc = self.uow.get_account(to_id)
+
+            from_acc.debit(amount)
+            to_acc.credit(amount)
+
+            self.uow.ledger.append(f"TRANSFERRED ${amount:.2f} from {from_id} to {to_id}")
+
+
+# ==============================================================================
+# 5. Driver / Demonstration
 # ==============================================================================
 if __name__ == "__main__":
-    live_db = {
-        "ACC-1": BankAccount("ACC-1", 1000.0),
-        "ACC-2": BankAccount("ACC-2", 200.0),
+    initial_db = {
+        "acc_1": Account("acc_1", "Alice", 1000.0),
+        "acc_2": Account("acc_2", "Bob", 500.0),
     }
 
-    uow = FakeUnitOfWork(live_db)
+    uow = InMemoryUnitOfWork(initial_db)
+    service = BankTransferService(uow)
 
-    print("Initial Balances: ACC-1=$1000, ACC-2=$200")
+    # 1. Successful transfer
+    service.transfer("acc_1", "acc_2", 200.0)
+    print("Post Transfer Alice Balance:", uow._datastore["acc_1"].balance)  # 800
+    print("Post Transfer Bob Balance:", uow._datastore["acc_2"].balance)  # 700
 
-    # Successful transfer
-    transfer_funds(uow, "ACC-1", "ACC-2", 300.0)
-    print(f"Post-Transfer: ACC-1=${live_db['ACC-1'].balance}, ACC-2=${live_db['ACC-2'].balance}")
-
-    # Failed transfer (Overdraft)
+    # 2. Failed transfer (insufficient balance -> rollback)
     try:
-        transfer_funds(uow, "ACC-1", "ACC-2", 5000.0)
-    except ValueError as e:
-        print(f"Transfer blocked: {e}")
+        service.transfer("acc_1", "acc_2", 5000.0)
+    except ValueError as err:
+        print("Transfer safely failed & rolled back with error:", err)
 
-    print(
-        f"Post-Failure:  ACC-1=${live_db['ACC-1'].balance}, ACC-2=${live_db['ACC-2'].balance} (Unchanged!)"
-    )
+    print("After Failed Transfer Alice Balance:", uow._datastore["acc_1"].balance)  # 800 unchanged
