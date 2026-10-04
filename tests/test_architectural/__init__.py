@@ -1,1 +1,1 @@
-"""Unit tests for Architectural Patterns."""
+"""Architectural tests package."""
